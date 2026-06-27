@@ -1,0 +1,220 @@
+# ==============================================================================
+# PERFECT .GITIGNORE FOR QUICKBITE (DJANGO BACKEND + VITE/REACT FRONTEND)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Operating System Files
+# ------------------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+*.cab
+*.msi
+*.msm
+*.msp
+
+# Linux / Generic
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ------------------------------------------------------------------------------
+# 2. IDEs, Editors & Workspace Settings
+# ------------------------------------------------------------------------------
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.history/
+*.code-workspace
+
+# JetBrains (PyCharm, WebStorm, Rider, IntelliJ, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim / Emacs
+*.swp
+*.swo
+*~
+\#*\#
+.#*
+.recommenders/
+
+# ------------------------------------------------------------------------------
+# 3. Python & Django (Backend)
+# ------------------------------------------------------------------------------
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.dylib
+*.dll
+*.pyd
+
+# Python virtual environments (local and backend specific)
+.venv/
+venv/
+ENV/
+env/
+ENV*/
+venv*/
+pythonvenv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Django specific
+db.sqlite3
+db.sqlite3-journal
+*.sqlite3
+backend/db.sqlite3
+backend/db.sqlite3-journal
+backend/staticfiles/
+backend/media/
+staticfiles/
+media/
+media-root/
+/static/
+/media/
+
+# Django Celery & broker logs
+celerybeat-schedule
+celerybeat.pid
+
+# Packaging & Distribution
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Pytest / Coverage / Linting
+.cache/
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+.htmlcov/
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.mypy_cache/
+.pyre/
+.pytype/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ------------------------------------------------------------------------------
+# 4. Node.js & Frontend (Vite / React)
+# ------------------------------------------------------------------------------
+# Dependencies
+node_modules/
+/node_modules/
+frontend/node_modules/
+
+# Production build output
+dist/
+dist-ssr/
+frontend/dist/
+frontend/dist-ssr/
+out/
+build-dev/
+
+# Logs & Debug
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Next.js/Nuxt.js build caches (just in case they are used)
+.next/
+.nuxt/
+.svelte-kit/
+.expo/
+.turbo/
+.eslintcache
+
+# Frontend Framework specific
+.parcel-cache/
+.cache/
+
+# ------------------------------------------------------------------------------
+# 5. Environment Variables & Secrets (CRITICAL SECURITY)
+# ------------------------------------------------------------------------------
+# Ignore all .env files recursively in any directory
+**/.env
+**/.env.*
+**/*.env
+**/*.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+**/.env.backup
+!**/.env.example
+*.env
+**/*.local
+
+# Credentials / Private keys
+*.pem
+*.key
+*.pub
+*.p12
+*.pfx
+secrets.json
+client_secret*.json
+
+# ------------------------------------------------------------------------------
+# 6. Database Dumps & Local Storage (Avoid committing huge local DB dumps)
+# ------------------------------------------------------------------------------
+*.sql
+*.dump
+*.rdb
+*.db
+**/*.sqlite3
+**/*.sqlite3-journal
