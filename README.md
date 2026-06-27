@@ -7,6 +7,7 @@ A full-stack food ordering and delivery web application with three user roles â€
 ## Table of Contents
 
 - [Overview](#overview)
+- [Live Demo & Test Credentials](#live-demo--test-credentials)
 - [Features](#features)
   - [Customer](#customer)
   - [Restaurant Dashboard](#restaurant-dashboard)
@@ -29,6 +30,18 @@ A full-stack food ordering and delivery web application with three user roles â€
 QuickBite is a full-stack food delivery platform where customers can browse restaurants, add items to cart, place orders with online payment, and track their delivery in real-time on a map. Restaurant owners manage their menu, handle incoming orders, and assign delivery riders. Delivery partners go online, share their GPS location, and complete deliveries.
 
 The app uses **React** on the frontend and **Django REST Framework** on the backend, with **WebSockets** (Django Channels) for real-time communication between all three user roles.
+
+---
+
+## Live Demo & Test Credentials
+
+To test the live application without going through the registration and email OTP verification flow, you can log in using the following verified test accounts:
+
+| Role | Email Address | Password | Details |
+| :--- | :--- | :--- | :--- |
+| **Customer** | `customer@quickbite.com` | `QuickBite123!` | Browse restaurants, add items to cart, place orders, and track delivery |
+| **Restaurant Owner** | `owner@quickbite.com` | `QuickBite123!` | Manages "The Farsan Factory" (accept orders, assign riders, edit menu) |
+| **Delivery Partner (Rider)** | `rider@quickbite.com` | `QuickBite123!` | Go online, accept/decline orders, and simulate delivery maps |
 
 ---
 
