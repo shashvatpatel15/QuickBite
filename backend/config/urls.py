@@ -18,7 +18,13 @@ from django.contrib import admin
 from django.urls import path,include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
+from django.http import JsonResponse
+
+def health_check(request):
+    return JsonResponse({"status": "ok"})
+
 urlpatterns = [
+    path('api/health/', health_check, name='api_health_check'),
 
     path('admin/', admin.site.urls),
     path("api/auth/", include("users.urls")),
