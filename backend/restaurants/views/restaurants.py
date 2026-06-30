@@ -2,7 +2,7 @@ from restaurants.models.restaurant import Restaurant
 from restaurants.serializers.restaurant import RestaurantSerializer
 from users.permissions import(IsRestaurantOwner)
 from rest_framework import viewsets
-from rest_framework.permissions import (AllowAny,IsAuthenticated)
+import rest_framework.permissions
 
 
 class RestaurantViewSet(viewsets.ModelViewSet):
@@ -13,10 +13,10 @@ class RestaurantViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
 
         if self.action in ["list", "retrieve"]:
-            return [AllowAny()]
+            return [rest_framework.permissions.AllowAny()]
 
         return [
-            IsAuthenticated(),
+            rest_framework.permissions.IsAuthenticated(),
             IsRestaurantOwner()
         ]
 

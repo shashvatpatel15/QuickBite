@@ -19,9 +19,6 @@ from users.permissions import (
     IsRestaurantOwner
 )
 
-from orders.serializers.order_serializer import (
-    OrderSerializer
-)
 
 from orders.serializers.order_detail_serializer import (
     OrderDetailSerializer

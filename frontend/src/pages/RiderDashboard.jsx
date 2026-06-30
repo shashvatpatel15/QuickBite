@@ -106,7 +106,8 @@ const RiderDashboard = () => {
 
     if (!profile.is_online) {
       if (!navigator.geolocation) {
-        setError("Geolocation is not supported by your browser.");
+        setError("Geolocation is not supported by your browser. Going online with last known location.");
+        handleUpdateProfile({ is_online: true });
         return;
       }
 
@@ -126,15 +127,11 @@ const RiderDashboard = () => {
         },
         (err) => {
           console.error("Geolocation error:", err);
-          let errMsg = "Failed to retrieve location. Please enable GPS permissions to go online.";
-          if (err.code === err.PERMISSION_DENIED) {
-            errMsg = "Location access denied. You must grant location permission to go online.";
-          }
-          setError(errMsg);
+          setError("Could not retrieve precise GPS location. Going online with last known location.");
           setSuccess("");
-          setUpdatingProfile(false);
+          handleUpdateProfile({ is_online: true });
         },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
       );
     } else {
       handleUpdateProfile({ is_online: false });
@@ -156,6 +153,10 @@ const RiderDashboard = () => {
 
   // Persistent location tracking: WebSocket + watchPosition while rider is online
   useEffect(() => {
+    let reconnectTimeout = null;
+    let ws = null;
+    let watchId = null;
+
     if (!profile || !profile.is_online) {
       // Cleanup if rider goes offline
       if (locationWsRef.current) {
@@ -169,60 +170,68 @@ const RiderDashboard = () => {
       return;
     }
 
-    // Don't open if already connected
-    if (locationWsRef.current && locationWsRef.current.readyState === WebSocket.OPEN) return;
+    const connectWS = () => {
+      // Don't open if already connected or no longer online
+      if (!profile?.is_online) return;
+      if (locationWsRef.current && locationWsRef.current.readyState === WebSocket.OPEN) return;
 
-    const token = localStorage.getItem("accessToken");
-    if (!token) {
-      return;
-    }
+      const token = localStorage.getItem("accessToken");
+      if (!token) return;
 
-    const apiBaseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-    const wsProtocol = apiBaseURL.startsWith("https") ? "wss" : "ws";
-    const wsHost = apiBaseURL.replace(/^https?:\/\//, "");
-    const wsUrl = `${wsProtocol}://${wsHost}/ws/delivery-tracking/?token=${token}`;
+      const apiBaseURL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+      const wsProtocol = apiBaseURL.startsWith("https") ? "wss" : "ws";
+      const wsHost = apiBaseURL.replace(/^https?:\/\//, "");
+      const wsUrl = `${wsProtocol}://${wsHost}/ws/delivery-tracking/?token=${token}`;
 
-    const ws = new WebSocket(wsUrl);
-    locationWsRef.current = ws;
+      ws = new WebSocket(wsUrl);
+      locationWsRef.current = ws;
 
-    ws.onopen = () => {
+      ws.onopen = () => {
+        // Start continuous GPS tracking
+        if (navigator.geolocation && watchId === null) {
+          watchId = navigator.geolocation.watchPosition(
+            (position) => {
+              const lat = parseFloat(position.coords.latitude.toFixed(6));
+              const lng = parseFloat(position.coords.longitude.toFixed(6));
 
-      // Start continuous GPS tracking
-      if (navigator.geolocation) {
-        const watchId = navigator.geolocation.watchPosition(
-          (position) => {
-            const lat = parseFloat(position.coords.latitude.toFixed(6));
-            const lng = parseFloat(position.coords.longitude.toFixed(6));
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ latitude: lat, longitude: lng }));
+              }
+            },
+            (err) => {
+              console.error("GPS watchPosition error:", err);
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+          );
+          geoWatchIdRef.current = watchId;
+        }
+      };
 
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ latitude: lat, longitude: lng }));
-            }
-          },
-          (err) => {
-            console.error("GPS watchPosition error:", err);
-          },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-        );
-        geoWatchIdRef.current = watchId;
-      }
+      ws.onerror = (err) => {
+        console.error("Location tracking WebSocket error:", err);
+      };
+
+      ws.onclose = () => {
+        locationWsRef.current = null;
+        if (profile?.is_online) {
+          reconnectTimeout = setTimeout(connectWS, 5000);
+        }
+      };
     };
 
-    ws.onerror = (err) => {
-      console.error("Location tracking WebSocket error:", err);
-    };
-
-    ws.onclose = () => {
-      locationWsRef.current = null;
-    };
+    connectWS();
 
     // Cleanup on unmount or when rider goes offline
     return () => {
-      if (locationWsRef.current) {
-        locationWsRef.current.close();
-        locationWsRef.current = null;
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
       }
-      if (geoWatchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(geoWatchIdRef.current);
+      if (ws) {
+        ws.close();
+      }
+      locationWsRef.current = null;
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
         geoWatchIdRef.current = null;
       }
     };

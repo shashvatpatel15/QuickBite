@@ -277,7 +277,7 @@ const CustomerDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-surface pt-24 sm:pt-32 pb-20 sm:pb-24 px-2 sm:px-6 lg:px-16 overflow-x-auto">
+    <div className="min-h-screen bg-surface pt-24 sm:pt-32 pb-20 sm:pb-24 px-2 sm:px-6 lg:px-16 overflow-x-hidden md:overflow-x-auto">
       <div className="container mx-auto max-w-6xl space-y-6 sm:space-y-10">
 
         {/* Dynamic Location Selection/Bypass Banner */}

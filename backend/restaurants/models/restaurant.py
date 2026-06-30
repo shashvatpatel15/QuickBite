@@ -64,7 +64,27 @@ class Restaurant(models.Model):
     updated_at = models.DateTimeField(
         auto_now=True
     )
-
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        from config.geocoding import geocode_address
+        # Geocode if coordinates are empty or address/city changed
+        if self.pk:
+            try:
+                orig = Restaurant.objects.get(pk=self.pk)
+                if orig.address != self.address or orig.city != self.city:
+                    lat, lon = geocode_address(f"{self.address}, {self.city}")
+                    if lat is not None and lon is not None:
+                        self.latitude = lat
+                        self.longitude = lon
+            except Restaurant.DoesNotExist:
+                pass
+        else:
+            if not self.latitude or not self.longitude:
+                lat, lon = geocode_address(f"{self.address}, {self.city}")
+                if lat is not None and lon is not None:
+                    self.latitude = lat
+                    self.longitude = lon
+        super().save(*args, **kwargs)
 

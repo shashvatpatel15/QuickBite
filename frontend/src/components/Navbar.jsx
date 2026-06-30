@@ -176,17 +176,17 @@ const Navbar = () => {
   return (
     <>
       <nav
-        className={`fixed top-0 w-full z-40 transition-all duration-300 px-6 lg:px-16 ${
+        className={`fixed top-0 w-full z-40 transition-all duration-300 px-3 sm:px-6 lg:px-16 ${
           scrolled
             ? "bg-white/95 backdrop-blur-md shadow-sm py-4"
             : "bg-transparent py-6"
         }`}
       >
         <div className="container mx-auto max-w-6xl flex justify-between items-center">
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2 sm:gap-6 min-w-0">
             <Link
               to={user ? (user.role === "restaurant_owner" ? "/owner/dashboard" : user.role === "delivery_partner" ? "/delivery/dashboard" : "/dashboard") : "/"}
-              className="font-display text-2xl font-extrabold text-primary tracking-tight flex-shrink-0"
+              className="font-display text-xl sm:text-2xl font-extrabold text-primary tracking-tight flex-shrink-0"
             >
               QuickBite
             </Link>
@@ -195,13 +195,13 @@ const Navbar = () => {
             {user && user.role === "customer" && (
               <button
                 onClick={() => setIsDrawerOpen(true)}
-                className="flex items-center gap-1 border-l border-outline-variant/35 pl-3 sm:pl-6 text-xs h-6 hover:text-primary transition-colors cursor-pointer text-left focus:outline-none"
+                className="flex items-center gap-1 border-l border-outline-variant/35 pl-2 sm:pl-6 text-xs h-6 hover:text-primary transition-colors cursor-pointer text-left focus:outline-none min-w-0"
               >
-                <span className="material-symbols-outlined text-primary text-base font-semibold">location_on</span>
-                <span className="font-bold text-on-surface line-clamp-1 max-w-[80px] sm:max-w-[150px]">
+                <span className="material-symbols-outlined text-primary text-base font-semibold flex-shrink-0">location_on</span>
+                <span className="font-bold text-on-surface line-clamp-1 max-w-[70px] sm:max-w-[150px] truncate">
                   {deliveryLocation || "Select Location..."}
                 </span>
-                <span className="material-symbols-outlined text-secondary text-xs">expand_more</span>
+                <span className="material-symbols-outlined text-secondary text-xs flex-shrink-0">expand_more</span>
               </button>
             )}
             
@@ -239,7 +239,7 @@ const Navbar = () => {
             )}
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-6">
+          <div className="flex items-center gap-2 sm:gap-6 flex-shrink-0">
             {user ? (
               <div className="flex items-center gap-2 sm:gap-6">
                 {user.role === "customer" && (

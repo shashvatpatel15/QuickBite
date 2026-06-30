@@ -1,8 +1,5 @@
-from rest_framework.routers import (
-    DefaultRouter
-)
-from delivery.views.delivery_order import DeliveryOrderViewSet
-from delivery.views.delivery_partner import DeliveryPartnerViewSet
+from rest_framework.routers import DefaultRouter
+from delivery.views import DeliveryOrderViewSet, DeliveryPartnerViewSet
 
 router = DefaultRouter()
 

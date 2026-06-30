@@ -21,8 +21,7 @@ class DeliveryTrackingConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        if hasattr(self, "delivery_partner"):
-            await self.set_online_status(False)
+        pass
 
     @database_sync_to_async
     def set_online_status(self, is_online):
