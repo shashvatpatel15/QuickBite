@@ -17,7 +17,8 @@ from orders.serializers.order_serializer import (
 from orders.serializers.order_detail_serializer import (
     OrderDetailSerializer
 )
-
+from common.pagination import CommonPagination
+from orders.filters import CustomerOrderFilter
 
 class CustomerOrderViewSet(viewsets.ModelViewSet):
 
@@ -30,6 +31,20 @@ class CustomerOrderViewSet(viewsets.ModelViewSet):
         "get",
         "patch"
     ]
+
+    filterset_class = CustomerOrderFilter
+    pagination_class = CommonPagination
+    
+    search_fields = [
+        "restaurant__name",
+    ]
+
+    ordering_fields = [
+        "created_at",
+        "total_amount",
+    ]
+
+    ordering = ["-created_at"]
 
     def get_queryset(self):
         return (

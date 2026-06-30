@@ -59,8 +59,10 @@ INSTALLED_APPS = [
     'orders',
     'payments',
     'delivery',
+    'common',
     'channels',
     'drf_spectacular',
+    'django_filters',
 
 ]
 
@@ -214,14 +216,20 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
 }
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Food Ordering Platform API",
     "DESCRIPTION": """
-    Production-inspired food ordering platform backend built using
+    Scalable food ordering platform backend built using
     Django REST Framework, PostgreSQL, JWT Authentication, and
     role-based access control.
 
@@ -252,12 +260,13 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "Asia/Kolkata"
 
 USE_I18N = True
 
 USE_TZ = True
 
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/

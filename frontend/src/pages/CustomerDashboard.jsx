@@ -13,6 +13,11 @@ const CustomerDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(6);
+  const [totalCount, setTotalCount] = useState(0);
+
   // Filter States
   const [searchQuery, setSearchQuery] = useState(searchParams.get("search") || "");
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get("category") || "");
@@ -20,7 +25,7 @@ const CustomerDashboard = () => {
   const [ratingAboveFour, setRatingAboveFour] = useState(false);
   const [hasOffersFilter, setHasOffersFilter] = useState(false);
   const [costBracket, setCostBracket] = useState(""); // "", "under300", "300to500", "above500"
-  const [sortBy, setSortBy] = useState("relevance"); // "relevance", "rating", "costAsc", "costDesc", "deliveryTime"
+  const [sortBy, setSortBy] = useState("relevance"); // "relevance", "rating", "costAsc", "costDesc", "deliveryTime", "nameAsc", "nameDesc", "createdDesc"
 
   const [localLocInput, setLocalLocInput] = useState("");
   const [detectingLoc, setDetectingLoc] = useState(false);
@@ -90,24 +95,70 @@ const CustomerDashboard = () => {
     );
   };
 
-  // Fetch all data
+  // Helper to extract city name from delivery location
+  const getCityFromLocation = (loc) => {
+    if (!loc) return "";
+    const parts = loc.split(/[\s,.-]+/);
+    const cities = ["noida", "delhi", "mumbai", "bangalore", "bengaluru", "gurgaon", "gurugram", "hyderabad", "pune", "chennai", "kolkata"];
+    for (const part of parts) {
+      const p = part.toLowerCase().trim();
+      if (cities.includes(p)) {
+        return part;
+      }
+    }
+    for (const part of parts) {
+      if (part.length > 3 && isNaN(part)) {
+        return part;
+      }
+    }
+    return parts[0] || "";
+  };
+
+  // Fetch static lookup data (categories and active orders) once on mount
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    const fetchLookups = async () => {
       try {
-        const [resResponse, catResponse, ordersResponse] = await Promise.all([
-          API.get("/api/restaurants/"),
+        const [catResponse, ordersResponse] = await Promise.all([
           API.get("/api/categories/"),
           API.get("/api/orders/").catch(() => ({ data: [] }))
         ]);
-
+        setCategories(catResponse.data);
         const active = (ordersResponse.data || []).filter(
           (o) => o.status !== "delivered" && o.status !== "cancelled"
         );
         setActiveOrders(active);
+      } catch (err) {
+        console.error("Failed to load initial lookups:", err);
+      }
+    };
+    fetchLookups();
+  }, []);
+
+  // Fetch restaurants dynamically
+  useEffect(() => {
+    const fetchRestaurants = async () => {
+      setLoading(true);
+      try {
+        const cityParam = (!bypassLocation && deliveryLocation) ? getCityFromLocation(deliveryLocation) : "";
+        const params = {
+          page,
+          page_size: pageSize,
+        };
+        if (searchQuery) params.search = searchQuery;
+        if (cityParam) params.city = cityParam;
+        
+        // Map sortBy to backend ordering
+        if (sortBy === "nameAsc") params.ordering = "name";
+        else if (sortBy === "nameDesc") params.ordering = "-name";
+        else if (sortBy === "createdDesc") params.ordering = "-created_at";
+
+        const resResponse = await API.get("/api/restaurants/", { params });
+        // Handle pagination response structure
+        const rawRestaurants = resResponse.data.results || [];
+        setTotalCount(resResponse.data.count || 0);
 
         // Inject simulated premium fields to mimic Swiggy/Zomato dynamic data
-        const processed = resResponse.data.map((res) => {
+        const processed = rawRestaurants.map((res) => {
           // Dynamic yet deterministic variables based on name / ID
           const rating = ((res.id * 7) % 9) * 0.1 + 4.0; // 4.0 to 4.8
           const deliveryTime = ((res.id * 13) % 6) * 5 + 20; // 20 to 45 mins
@@ -133,18 +184,21 @@ const CustomerDashboard = () => {
         });
 
         setRestaurants(processed);
-        setCategories(catResponse.data);
         setError(null);
       } catch (err) {
-        console.error("Failed to load dashboard data:", err);
+        console.error("Failed to load restaurants list:", err);
         setError("Could not load restaurants list.");
       } finally {
         setLoading(false);
       }
     };
-    fetchData();
-  }, []);
+    fetchRestaurants();
+  }, [page, pageSize, searchQuery, deliveryLocation, bypassLocation, sortBy]);
 
+  // Reset page to 1 when filters or location change
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, selectedCategory, vegOnly, ratingAboveFour, hasOffersFilter, costBracket, sortBy, deliveryLocation, bypassLocation]);
 
   // Sync state variables back to SearchParams for URL sharing
   useEffect(() => {
@@ -163,70 +217,40 @@ const CustomerDashboard = () => {
     }
   };
 
-  // Filter restaurants locally
+  // Filter restaurants locally on simulated properties
   const filteredRestaurants = restaurants.filter((restaurant) => {
-    // 1. Keyword search (Name, Description, City)
+    // 1. Keyword search (done on server, but left as a safety fallback)
     const matchesSearch = searchQuery
       ? (restaurant.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (restaurant.description || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (restaurant.city || "").toLowerCase().includes(searchQuery.toLowerCase())
+        (restaurant.description || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (restaurant.city || "").toLowerCase().includes(searchQuery.toLowerCase())
       : true;
 
-    // 2. Swiggy/Zomato style Pincode/Location matching
+    // 2. Swiggy/Zomato style location matching (done on server, left as safety fallback)
     const matchesLocation = (() => {
       if (bypassLocation) return true;
       if (!deliveryLocation) return true;
-
       const locClean = deliveryLocation.toLowerCase().trim();
-      const resAddress = (restaurant.address || "").toLowerCase();
       const resCity = (restaurant.city || "").toLowerCase();
-
-      // 1. Try to extract Indian pincodes (6-digit numbers)
-      const pincodeRegex = /\b\d{6}\b/;
-      const locPincodeMatch = locClean.match(pincodeRegex);
-      if (locPincodeMatch) {
-        const pincode = locPincodeMatch[0];
-        if (resAddress.includes(pincode)) return true;
-      }
-
-      // 2. Direct inclusion checks
-      if (resAddress.includes(locClean) || locClean.includes(resAddress)) return true;
-      if (resCity.includes(locClean) || locClean.includes(resCity)) return true;
-
-      // 3. Keyword matching: check if any significant token matches
-      // Split by spaces, commas, hyphens, etc. and remove generic terms
-      const tokens = locClean
-        .split(/[\s,.-]+/)
-        .filter((t) => t.length > 2 && !["india", "pradesh", "uttar", "delhi", "noida"].includes(t));
-
-      if (tokens.length > 0 && tokens.some((token) => resCity.includes(token) || resAddress.includes(token))) {
-        return true;
-      }
-
-      // Fallback: check city directly
-      if (locClean.includes(resCity) || resCity.includes(locClean)) return true;
-
-      return false;
+      return resCity.includes(getCityFromLocation(locClean).toLowerCase()) || locClean.includes(resCity);
     })();
 
-    // 3. Category/Cuisine Carousel Selection
-    // Since backend does not return menu categories in the restaurant object directly,
-    // we match category filter against the restaurant's name, description, or cuisine list.
+    // 3. Category/Cuisine Carousel Selection (client fallback)
     const matchesCategory = selectedCategory
       ? (restaurant.description || "").toLowerCase().includes(selectedCategory.toLowerCase()) ||
-      (restaurant.name || "").toLowerCase().includes(selectedCategory.toLowerCase())
+        (restaurant.name || "").toLowerCase().includes(selectedCategory.toLowerCase())
       : true;
 
-    // 4. Veg Only
+    // 4. Veg Only (Simulated)
     const matchesVeg = vegOnly ? restaurant.isVeg : true;
 
-    // 5. Rating 4.0+
+    // 5. Rating 4.0+ (Simulated)
     const matchesRating = ratingAboveFour ? restaurant.rating >= 4.4 : true;
 
-    // 6. Offers Filter
+    // 6. Offers Filter (Simulated)
     const matchesOffers = hasOffersFilter ? restaurant.offers !== null : true;
 
-    // 7. Cost Bracket Filter
+    // 7. Cost Bracket Filter (Simulated)
     let matchesCost = true;
     if (costBracket === "under300") {
       matchesCost = restaurant.averageCost <= 300;
@@ -239,7 +263,7 @@ const CustomerDashboard = () => {
     return matchesSearch && matchesLocation && matchesCategory && matchesVeg && matchesRating && matchesOffers && matchesCost;
   });
 
-  // Sort filtered restaurants
+  // Sort filtered restaurants locally on simulated properties
   const sortedRestaurants = [...filteredRestaurants].sort((a, b) => {
     if (sortBy === "rating") {
       return b.rating - a.rating;
@@ -253,7 +277,7 @@ const CustomerDashboard = () => {
     if (sortBy === "deliveryTime") {
       return a.deliveryTime - b.deliveryTime;
     }
-    return 0; // Default: Relevance (from DB)
+    return 0; // Backend sorting or relevance
   });
 
   const clearAllFilters = () => {
@@ -265,6 +289,8 @@ const CustomerDashboard = () => {
     setCostBracket("");
     setSortBy("relevance");
   };
+
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   const getActiveFilterCount = () => {
     let count = 0;
@@ -448,6 +474,9 @@ const CustomerDashboard = () => {
                 className="bg-transparent border-none py-0.5 px-1 focus:ring-0 text-xs outline-none text-on-surface font-semibold cursor-pointer"
               >
                 <option value="relevance">Relevance</option>
+                <option value="nameAsc">Name: A to Z</option>
+                <option value="nameDesc">Name: Z to A</option>
+                <option value="createdDesc">Newest Kitchens</option>
                 <option value="rating">Rating: High to Low</option>
                 <option value="costAsc">Cost: Low to High</option>
                 <option value="costDesc">Cost: High to Low</option>
@@ -562,10 +591,37 @@ const CustomerDashboard = () => {
           </div>
         ) : (
           /* Restaurants Grid */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-            {sortedRestaurants.map((restaurant) => (
-              <RestaurantCard key={restaurant.id} restaurant={restaurant} />
-            ))}
+          <div className="space-y-12">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              {sortedRestaurants.map((restaurant) => (
+                <RestaurantCard key={restaurant.id} restaurant={restaurant} />
+              ))}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-4 bg-white p-4 rounded-2xl border border-outline-variant/10 shadow-xs max-w-xs mx-auto">
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={page === 1}
+                  className="p-2 bg-surface hover:bg-surface-container rounded-xl text-secondary hover:text-on-surface disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed transition-all"
+                >
+                  <span className="material-symbols-outlined text-lg">chevron_left</span>
+                </button>
+                <span className="text-xs font-bold text-on-surface">
+                  Page {page} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+                  disabled={page === totalPages}
+                  className="p-2 bg-surface hover:bg-surface-container rounded-xl text-secondary hover:text-on-surface disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed transition-all"
+                >
+                  <span className="material-symbols-outlined text-lg">chevron_right</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 

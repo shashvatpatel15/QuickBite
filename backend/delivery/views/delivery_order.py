@@ -6,12 +6,24 @@ from orders.models.order import Order
 from orders.services.order_status import handle_order_status_change
 from delivery.serializers.delivery_order_list import DeliveryOrderListSerializer
 from delivery.serializers.delivery_order_update import DeliveryOrderUpdateSerializer
-
+from delivery.filters import RiderOrderFilter
+from common.pagination import CommonPagination
 
 class DeliveryOrderViewSet(viewsets.ModelViewSet):
 
     permission_classes = [
         IsDeliveryPartner
+    ]
+    pagination_class = CommonPagination
+
+    filterset_class = RiderOrderFilter
+
+    ordering_fields = [
+        "created_at",
+    ]
+
+    ordering = [
+        "-created_at",
     ]
 
     http_method_names = [ 

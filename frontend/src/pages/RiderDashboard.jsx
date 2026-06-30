@@ -16,6 +16,15 @@ const RiderDashboard = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // History Pagination & Filtering states
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(5);
+  const [historyTotalCount, setHistoryTotalCount] = useState(0);
+  const [historyStatus, setHistoryStatus] = useState("delivered"); // "delivered", "cancelled"
+  const [historySortBy, setHistorySortBy] = useState("-created_at"); // "-created_at", "created_at"
+  const [historyCreatedAfter, setHistoryCreatedAfter] = useState("");
+  const [historyCreatedBefore, setHistoryCreatedBefore] = useState("");
+
   // Journey Simulation State
   const [simulatingOrderId, setSimulatingOrderId] = useState(null);
   const [simulationProgress, setSimulationProgress] = useState(0); // 0 to 100
@@ -31,10 +40,43 @@ const RiderDashboard = () => {
   const mapContainerId = "rider-route-map";
   const riderMarkerRef = useRef(null);
 
+  // Fetch active orders (usually max 1-2 active ones, so page_size=10 covers all on page 1)
+  const fetchActiveOrders = async () => {
+    try {
+      const res = await API.get("/api/delivery/orders/", { params: { page_size: 10 } });
+      const raw = res.data.results || [];
+      const active = raw.filter(o => o.status !== "delivered" && o.status !== "cancelled");
+      setActiveOrders(active);
+    } catch (err) {
+      console.error("Rider active orders fetch error:", err);
+    }
+  };
+
+  // Fetch paginated delivery history using backend filters
+  const fetchCompletedOrders = async () => {
+    try {
+      const params = {
+        page: historyPage,
+        page_size: historyPageSize,
+        ordering: historySortBy,
+        status: historyStatus,
+      };
+      if (historyCreatedAfter) params.created_after = historyCreatedAfter;
+      if (historyCreatedBefore) params.created_before = historyCreatedBefore;
+
+      const res = await API.get("/api/delivery/orders/", { params });
+      setCompletedOrders(res.data.results || []);
+      setHistoryTotalCount(res.data.count || 0);
+    } catch (err) {
+      console.error("Rider completed orders fetch error:", err);
+    }
+  };
+
   // Fetch Rider Profile and Orders
   const fetchData = async () => {
     try {
       setError("");
+      setLoading(true);
       // 1. Fetch Profile
       const profileRes = await API.get("/api/delivery/profile/");
       if (profileRes.data && profileRes.data.length > 0) {
@@ -46,14 +88,10 @@ const RiderDashboard = () => {
       }
 
       // 2. Fetch Orders
-      const ordersRes = await API.get("/api/delivery/orders/");
-      const allOrders = ordersRes.data || [];
-      
-      const active = allOrders.filter(o => o.status !== "delivered" && o.status !== "cancelled");
-      const completed = allOrders.filter(o => o.status === "delivered" || o.status === "cancelled");
-      
-      setActiveOrders(active);
-      setCompletedOrders(completed);
+      await Promise.all([
+        fetchActiveOrders(),
+        fetchCompletedOrders()
+      ]);
     } catch (err) {
       console.error("Rider dashboard fetch error:", err);
       setError("Failed to fetch dashboard data. Please try again.");
@@ -81,6 +119,18 @@ const RiderDashboard = () => {
       stopSimulation();
     };
   }, []);
+
+  // Fetch completed history on filter changes
+  useEffect(() => {
+    if (profile) {
+      fetchCompletedOrders();
+    }
+  }, [historyPage, historyPageSize, historySortBy, historyStatus, historyCreatedAfter, historyCreatedBefore]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [historySortBy, historyStatus, historyCreatedAfter, historyCreatedBefore]);
 
   // Update vehicle number or online status
   const handleUpdateProfile = async (updates) => {
@@ -728,36 +778,133 @@ const RiderDashboard = () => {
 
             {/* Delivery History List */}
             {viewMode === "history" && (
-              <div className="space-y-4">
+              <div className="space-y-6">
+                {/* Filters Panel */}
+                <div className="bg-white p-4 rounded-2xl border border-outline-variant/15 shadow-xs space-y-4 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Status selection */}
+                    <div className="flex flex-col gap-1 text-left">
+                      <label className="font-bold text-secondary uppercase tracking-wider text-[10px]">Filter Status</label>
+                      <select
+                        value={historyStatus}
+                        onChange={(e) => setHistoryStatus(e.target.value)}
+                        className="bg-surface-container rounded-xl border border-outline-variant/15 px-3 py-2 outline-none text-on-surface font-semibold cursor-pointer w-full"
+                      >
+                        <option value="delivered">Delivered</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </div>
+
+                    {/* Sorting */}
+                    <div className="flex flex-col gap-1 text-left">
+                      <label className="font-bold text-secondary uppercase tracking-wider text-[10px]">Sort By</label>
+                      <select
+                        value={historySortBy}
+                        onChange={(e) => setHistorySortBy(e.target.value)}
+                        className="bg-surface-container rounded-xl border border-outline-variant/15 px-3 py-2 outline-none text-on-surface font-semibold cursor-pointer w-full"
+                      >
+                        <option value="-created_at">Date: Newest First</option>
+                        <option value="created_at">Date: Oldest First</option>
+                      </select>
+                    </div>
+
+                    {/* Date Filters */}
+                    <div className="flex flex-col gap-1 text-left sm:col-span-3">
+                      <label className="font-bold text-secondary uppercase tracking-wider text-[10px]">Date Range</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          value={historyCreatedAfter}
+                          onChange={(e) => setHistoryCreatedAfter(e.target.value)}
+                          className="bg-surface-container rounded-xl border border-outline-variant/15 px-3 py-1.5 outline-none text-on-surface text-xs cursor-pointer w-full"
+                        />
+                        <span className="text-secondary text-xs">to</span>
+                        <input
+                          type="date"
+                          value={historyCreatedBefore}
+                          onChange={(e) => setHistoryCreatedBefore(e.target.value)}
+                          className="bg-surface-container rounded-xl border border-outline-variant/15 px-3 py-1.5 outline-none text-on-surface text-xs cursor-pointer w-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Reset Button */}
+                  {(historyStatus !== "delivered" || historySortBy !== "-created_at" || historyCreatedAfter || historyCreatedBefore) && (
+                    <div className="flex justify-end pt-2 border-t border-outline-variant/10">
+                      <button
+                        onClick={() => {
+                          setHistoryStatus("delivered");
+                          setHistorySortBy("-created_at");
+                          setHistoryCreatedAfter("");
+                          setHistoryCreatedBefore("");
+                        }}
+                        className="text-error hover:underline font-bold text-[10px] uppercase tracking-wider cursor-pointer"
+                      >
+                        Reset Filters
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 {completedOrders.length === 0 ? (
                   <div className="bg-surface-container-lowest border border-outline-variant/15 rounded-3xl p-10 text-center space-y-4">
                     <span className="material-symbols-outlined text-4xl text-secondary/35">receipt_long</span>
                     <h3 className="font-display font-bold text-on-surface">No Completed Deliveries</h3>
                     <p className="text-secondary text-xs font-light max-w-sm mx-auto">
-                      Completed tasks will appear here after you mark orders as delivered to customers.
+                      No delivery tasks matched your filter preferences.
                     </p>
                   </div>
                 ) : (
-                  completedOrders.map((order) => (
-                    <div key={order.id} className="bg-surface-container-lowest border border-outline-variant/15 rounded-2xl p-5 shadow-xs flex justify-between items-center gap-4 text-xs font-light">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-on-surface">Order #{order.id}</span>
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-tertiary/10 text-tertiary">
-                            {order.status}
-                          </span>
+                  <div className="space-y-4">
+                    {completedOrders.map((order) => (
+                      <div key={order.id} className="bg-surface-container-lowest border border-outline-variant/15 rounded-2xl p-5 shadow-xs flex justify-between items-center gap-4 text-xs font-light">
+                        <div className="text-left">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-on-surface">Order #{order.id}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                              order.status === "delivered" ? "bg-tertiary/10 text-tertiary" : "bg-error/10 text-error"
+                            }`}>
+                              {order.status}
+                            </span>
+                          </div>
+                          <p className="text-secondary mt-1 font-semibold">{order.restaurant_name}</p>
+                          <p className="text-secondary/60 mt-0.5">{order.delivery_address?.substring(0, 45)}...</p>
                         </div>
-                        <p className="text-secondary mt-1 font-semibold">{order.restaurant_name}</p>
-                        <p className="text-secondary/60 mt-0.5">{order.delivery_address?.substring(0, 45)}...</p>
+                        <div className="text-right">
+                          <p className="font-bold text-on-surface text-sm">₹{parseFloat(order.total_amount).toFixed(2)}</p>
+                          <p className="text-secondary/50 text-[10px] mt-1">
+                            {new Date(order.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-on-surface text-sm">₹{parseFloat(order.total_amount).toFixed(2)}</p>
-                        <p className="text-secondary/50 text-[10px] mt-1">
-                          {new Date(order.created_at).toLocaleDateString()}
-                        </p>
+                    ))}
+
+                    {/* Pagination Controls */}
+                    {Math.ceil(historyTotalCount / historyPageSize) > 1 && (
+                      <div className="flex justify-center items-center gap-4 mt-6 bg-white p-3 rounded-2xl border border-outline-variant/10 shadow-xs max-w-xs mx-auto animate-[fadeIn_0.3s_ease-out]">
+                        <button
+                          type="button"
+                          onClick={() => setHistoryPage((prev) => Math.max(prev - 1, 1))}
+                          disabled={historyPage === 1}
+                          className="p-1.5 bg-surface hover:bg-surface-container rounded-xl text-secondary hover:text-on-surface disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed transition-all"
+                        >
+                          <span className="material-symbols-outlined text-base">chevron_left</span>
+                        </button>
+                        <span className="text-xs font-bold text-on-surface">
+                          Page {historyPage} of {Math.ceil(historyTotalCount / historyPageSize)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setHistoryPage((prev) => Math.min(prev + 1, Math.ceil(historyTotalCount / historyPageSize)))}
+                          disabled={historyPage === Math.ceil(historyTotalCount / historyPageSize)}
+                          className="p-1.5 bg-surface hover:bg-surface-container rounded-xl text-secondary hover:text-on-surface disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed transition-all"
+                        >
+                          <span className="material-symbols-outlined text-base">chevron_right</span>
+                        </button>
                       </div>
-                    </div>
-                  ))
+                    )}
+                  </div>
                 )}
               </div>
             )}

@@ -18,7 +18,8 @@ from orders.models.order import Order
 from users.permissions import (
     IsRestaurantOwner
 )
-
+from orders.filters import RestaurantOrderFilter
+from common.pagination import CommonPagination
 
 from orders.serializers.order_detail_serializer import (
     OrderDetailSerializer
@@ -35,6 +36,22 @@ class RestaurantOrderViewSet(
         IsAuthenticated,
         IsRestaurantOwner
     ]
+    
+    filterset_class = RestaurantOrderFilter
+    pagination_class = CommonPagination
+
+    search_fields = [
+        "customer__first_name",
+        "customer__last_name",
+        "customer__email",
+    ]
+
+    ordering_fields = [
+        "created_at",
+        "total_amount",
+    ]
+
+    ordering = ["-created_at"]
 
     http_method_names = [
         "get",
@@ -275,4 +292,4 @@ class RestaurantOrderViewSet(
                 "name": f"{rider.user.first_name} {rider.user.last_name}".strip() or rider.user.email.split('@')[0],
                 "phone_number": rider.user.phone_number or "No phone number",
             }
-        })
+        })

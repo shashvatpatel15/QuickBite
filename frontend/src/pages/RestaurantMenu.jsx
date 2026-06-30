@@ -21,57 +21,115 @@ const RestaurantMenu = () => {
   const [pendingItem, setPendingItem] = useState(null);
   const [replacing, setReplacing] = useState(false);
 
-  // Filter States
+  // Filter and Pagination States
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [foodTypeFilter, setFoodTypeFilter] = useState("All"); // All, Veg, Non-Veg
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(6);
+  const [totalCount, setTotalCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("name");
 
+  const [categoriesLookup, setCategoriesLookup] = useState([]);
+  const [foodTypesLookup, setFoodTypesLookup] = useState([]);
+  const [availableCategories, setAvailableCategories] = useState(["All"]);
+
+  // Fetch static lookup data and available categories for this restaurant on mount
   useEffect(() => {
-    const fetchMenuData = async () => {
+    const fetchInitialData = async () => {
       setLoading(true);
       try {
         // Fetch restaurant details
         const resResponse = await API.get(`/api/restaurants/${restaurantId}/`);
         setRestaurant(resResponse.data);
 
-        // Fetch menu items
-        const menuResponse = await API.get(`/api/restaurants/${restaurantId}/menu/`);
-        setMenuItems(menuResponse.data);
+        // Fetch lookups and full menu once to extract categories
+        const [catRes, ftRes, menuFullRes] = await Promise.all([
+          API.get("/api/categories/"),
+          API.get("/api/food-types/"),
+          API.get(`/api/restaurants/${restaurantId}/menu/`, { params: { page_size: 100 } }).catch(() => ({ data: { results: [] } }))
+        ]);
 
+        setCategoriesLookup(catRes.data || []);
+        setFoodTypesLookup(ftRes.data || []);
+
+        const rawItems = menuFullRes.data.results || [];
+        const uniqueCats = ["All", ...new Set(rawItems.map((item) => getDisplayValue(item.category)).filter(Boolean))];
+        setAvailableCategories(uniqueCats);
         setError(null);
       } catch (err) {
-        console.error("Failed to load restaurant menu:", err);
+        console.error("Failed to load initial restaurant details:", err);
         setError("Could not load restaurant menu details.");
       } finally {
         setLoading(false);
       }
     };
-    fetchMenuData();
+    fetchInitialData();
   }, [restaurantId]);
+
+  // Fetch paginated menu items dynamically
+  useEffect(() => {
+    const fetchMenu = async () => {
+      // Don't show global full screen spinner when paging, but set loading if it's initial
+      try {
+        let categoryId = "";
+        if (selectedCategory !== "All") {
+          const match = categoriesLookup.find((c) => c.name === selectedCategory);
+          if (match) categoryId = match.id;
+        }
+
+        let foodTypeId = "";
+        if (foodTypeFilter !== "All") {
+          const match = foodTypesLookup.find(
+            (f) =>
+              f.name.toLowerCase() === foodTypeFilter.toLowerCase() ||
+              (foodTypeFilter === "Veg" && f.name.toLowerCase() === "veg") ||
+              (foodTypeFilter === "Non-Veg" && f.name.toLowerCase() === "non-veg")
+          );
+          if (match) foodTypeId = match.id;
+        }
+
+        const params = {
+          page,
+          page_size: pageSize,
+          ordering: sortBy,
+        };
+        if (categoryId) params.category = categoryId;
+        if (foodTypeId) params.food_type = foodTypeId;
+        if (searchQuery) params.search = searchQuery;
+
+        const menuResponse = await API.get(`/api/restaurants/${restaurantId}/menu/`, { params });
+        setMenuItems(menuResponse.data.results || []);
+        setTotalCount(menuResponse.data.count || 0);
+        setError(null);
+      } catch (err) {
+        console.error("Failed to fetch menu items:", err);
+        setError("Could not load menu items.");
+      }
+    };
+
+    if (categoriesLookup.length > 0 && foodTypesLookup.length > 0) {
+      fetchMenu();
+    }
+  }, [page, pageSize, selectedCategory, foodTypeFilter, searchQuery, sortBy, categoriesLookup, foodTypesLookup, restaurantId]);
+
+  // Reset page to 1 on filter/search change
+  useEffect(() => {
+    setPage(1);
+  }, [selectedCategory, foodTypeFilter, searchQuery, sortBy]);
 
   const getDisplayValue = (value) => {
     if (value && typeof value === "object") {
       return value.name || String(value.id || "");
     }
-
     return String(value || "");
   };
 
-  // Extract unique categories in this restaurant's menu dynamically
-  const categories = ["All", ...new Set(menuItems.map((item) => getDisplayValue(item.category)).filter(Boolean))];
+  // Pre-computed categories
+  const categories = availableCategories;
 
-  // Filter items
-  const filteredItems = menuItems.filter((item) => {
-    const categoryName = getDisplayValue(item.category);
-    const foodTypeName = getDisplayValue(item.food_type).toLowerCase();
-    const matchesCategory = selectedCategory === "All" || categoryName === selectedCategory;
-    
-    const matchesFoodType =
-      foodTypeFilter === "All" ||
-      (foodTypeFilter === "Veg" && foodTypeName === "veg") ||
-      (foodTypeFilter === "Non-Veg" && foodTypeName === "non-veg");
-
-    return matchesCategory && matchesFoodType;
-  });
+  // Items are already filtered on server
+  const filteredItems = menuItems;
 
   const handleAddToCartError = (msg, itemDetails) => {
     if (msg.toLowerCase().includes("one restaurant")) {
@@ -286,10 +344,44 @@ const RestaurantMenu = () => {
 
           {/* Right panel: dishes list */}
           <main className="lg:col-span-9 space-y-6">
-            <div className="flex justify-between items-center pb-4 border-b border-outline-variant/15">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-outline-variant/15">
               <h2 className="font-display text-lg font-bold text-on-surface">
-                {selectedCategory} Items ({filteredItems.length})
+                {selectedCategory} Items ({totalCount})
               </h2>
+              
+              <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                {/* Menu Search Box */}
+                <div className="flex items-center bg-surface-container rounded-xl px-3 py-1 border border-outline-variant/15 focus-within:border-primary-orange transition-all text-xs w-full sm:max-w-xs">
+                  <span className="material-symbols-outlined text-secondary text-base">search</span>
+                  <input
+                    type="text"
+                    placeholder="Search dishes..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-transparent border-none py-1.5 px-2 focus:ring-0 outline-none text-on-surface"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery("")} className="text-secondary hover:text-on-surface">
+                      <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Sort Dropdown */}
+                <div className="flex items-center bg-surface-container rounded-xl px-3 py-1.5 border border-outline-variant/15 focus-within:border-primary-orange text-xs w-full sm:w-auto">
+                  <span className="material-symbols-outlined text-secondary text-sm mr-1">sort</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="bg-transparent border-none py-0.5 px-1 focus:ring-0 text-xs outline-none text-on-surface font-semibold cursor-pointer"
+                  >
+                    <option value="name">Name: A to Z</option>
+                    <option value="-name">Name: Z to A</option>
+                    <option value="price">Price: Low to High</option>
+                    <option value="-price">Price: High to Low</option>
+                  </select>
+                </div>
+              </div>
             </div>
             
             {filteredItems.length === 0 ? (
@@ -299,14 +391,41 @@ const RestaurantMenu = () => {
                 <p className="text-secondary text-xs mt-2 font-light">Try picking a different category or dietary preference.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {filteredItems.map((dish) => (
-                  <DishCard
-                    key={dish.id}
-                    dish={dish}
-                    onAddToCartError={handleAddToCartError}
-                  />
-                ))}
+              <div className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {filteredItems.map((dish) => (
+                    <DishCard
+                      key={dish.id}
+                      dish={dish}
+                      onAddToCartError={handleAddToCartError}
+                    />
+                  ))}
+                </div>
+
+                {/* Pagination Controls */}
+                {Math.ceil(totalCount / pageSize) > 1 && (
+                  <div className="flex justify-center items-center gap-4 bg-white p-3 rounded-2xl border border-outline-variant/10 shadow-xs max-w-xs mx-auto">
+                    <button
+                      type="button"
+                      onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                      disabled={page === 1}
+                      className="p-1.5 bg-surface hover:bg-surface-container rounded-xl text-secondary hover:text-on-surface disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed transition-all"
+                    >
+                      <span className="material-symbols-outlined text-base">chevron_left</span>
+                    </button>
+                    <span className="text-xs font-bold text-on-surface">
+                      Page {page} of {Math.ceil(totalCount / pageSize)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPage((prev) => Math.min(prev + 1, Math.ceil(totalCount / pageSize)))}
+                      disabled={page === Math.ceil(totalCount / pageSize)}
+                      className="p-1.5 bg-surface hover:bg-surface-container rounded-xl text-secondary hover:text-on-surface disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed transition-all"
+                    >
+                      <span className="material-symbols-outlined text-base">chevron_right</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </main>

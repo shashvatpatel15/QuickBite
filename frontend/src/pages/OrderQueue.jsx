@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import API from "../api";
 
@@ -22,6 +22,19 @@ const OrderQueue = () => {
   const [riderError, setRiderError] = useState(null);
   const [assigningRiderId, setAssigningRiderId] = useState(null);
 
+  // Pagination & Filter States
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [totalCount, setTotalCount] = useState(0);
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [riderAcceptedFilter, setRiderAcceptedFilter] = useState("All"); // "All", "Accepted", "Pending"
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("-created_at");
+  const [createdAfter, setCreatedAfter] = useState("");
+  const [createdBefore, setCreatedBefore] = useState("");
+
+  const [activeTab, setActiveTab] = useState("active"); // active, history
+
   const fetchOrders = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
@@ -29,11 +42,34 @@ const OrderQueue = () => {
       const resResponse = await API.get(`/api/restaurants/${restaurantId}/`);
       setRestaurant(resResponse.data);
 
-      // Restaurant orders
-      const response = await API.get(`/api/orders/restaurants/${restaurantId}/`);
-      // Sort orders descending by id
-      const sorted = response.data.sort((a, b) => b.id - a.id);
-      setOrders(sorted);
+      // Build backend params
+      const params = {
+        page,
+        page_size: pageSize,
+        ordering: sortBy,
+      };
+
+      if (statusFilter && statusFilter !== "All") {
+        params.status = statusFilter;
+      }
+      if (riderAcceptedFilter === "Accepted") {
+        params.rider_accepted = "true";
+      } else if (riderAcceptedFilter === "Pending") {
+        params.rider_accepted = "false";
+      }
+      if (searchQuery) {
+        params.search = searchQuery;
+      }
+      if (createdAfter) {
+        params.created_after = createdAfter;
+      }
+      if (createdBefore) {
+        params.created_before = createdBefore;
+      }
+
+      const response = await API.get(`/api/orders/restaurants/${restaurantId}/`, { params });
+      setOrders(response.data.results || []);
+      setTotalCount(response.data.count || 0);
       setError(null);
     } catch (err) {
       console.error("Failed to load restaurant orders queue:", err);
@@ -43,9 +79,20 @@ const OrderQueue = () => {
     }
   };
 
+  // Trigger fetch when pagination or filters change
   useEffect(() => {
     fetchOrders(true);
+  }, [page, pageSize, statusFilter, riderAcceptedFilter, searchQuery, sortBy, createdAfter, createdBefore, restaurantId]);
 
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, riderAcceptedFilter, searchQuery, sortBy, createdAfter, createdBefore]);
+  // Store latest fetchOrders in a ref to avoid stale closures in event handlers
+  const fetchOrdersRef = useRef();
+  fetchOrdersRef.current = fetchOrders;
+
+  useEffect(() => {
     const token = localStorage.getItem("accessToken");
     if (!token) {
       return;
@@ -68,7 +115,7 @@ const OrderQueue = () => {
           if (data.type === "new_order") {
             setMessageType("success");
             setMessage(`New order #${data.order_id} received for ₹${parseFloat(data.total).toFixed(2)}!`);
-            fetchOrders(false);
+            if (fetchOrdersRef.current) fetchOrdersRef.current(false);
 
             // Play notification chime
             try {
@@ -86,7 +133,7 @@ const OrderQueue = () => {
           } else if (data.type === "order_update") {
             setMessageType("success");
             setMessage(`Order #${data.order_id} status updated to ${data.status.replace(/_/g, " ").toUpperCase()}.`);
-            fetchOrders(false);
+            if (fetchOrdersRef.current) fetchOrdersRef.current(false);
 
             // Auto-clear status updates after 5 seconds
             setTimeout(() => {
@@ -115,7 +162,7 @@ const OrderQueue = () => {
 
     // Fallback polling every 30 seconds
     const interval = setInterval(() => {
-      fetchOrders(false);
+      if (fetchOrdersRef.current) fetchOrdersRef.current(false);
     }, 30000);
 
     return () => {
@@ -220,9 +267,17 @@ const OrderQueue = () => {
   const activeOrders = orders.filter((o) => !["delivered", "cancelled"].includes(o.status.toLowerCase()));
   const pastOrders = orders.filter((o) => ["delivered", "cancelled"].includes(o.status.toLowerCase()));
 
-  const [activeTab, setActiveTab] = useState("active"); // active, history
-
   const displayedOrders = activeTab === "active" ? activeOrders : pastOrders;
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setPage(1);
+    if (tab === "history") {
+      setStatusFilter("delivered");
+    } else {
+      setStatusFilter("All");
+    }
+  };
 
   if (loading && orders.length === 0) {
     return (
@@ -276,25 +331,133 @@ const OrderQueue = () => {
         {/* Tab Selection */}
         <div className="flex border-b border-outline-variant/10">
           <button
-            onClick={() => setActiveTab("active")}
+            onClick={() => handleTabChange("active")}
             className={`py-3 px-6 font-display text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
               activeTab === "active"
                 ? "border-primary text-primary"
                 : "border-transparent text-secondary/60 hover:text-on-surface"
             }`}
           >
-            Active Orders ({activeOrders.length})
+            Active Orders {activeTab === "active" ? `(${totalCount})` : ""}
           </button>
           <button
-            onClick={() => setActiveTab("history")}
+            onClick={() => handleTabChange("history")}
             className={`py-3 px-6 font-display text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${
               activeTab === "history"
                 ? "border-primary text-primary"
                 : "border-transparent text-secondary/60 hover:text-on-surface"
             }`}
           >
-            Past History ({pastOrders.length})
+            Past History {activeTab === "history" ? `(${totalCount})` : ""}
           </button>
+        </div>
+
+        {/* Advanced Filters Panel */}
+        <div className="bg-white p-4 rounded-2xl border border-outline-variant/15 shadow-xs space-y-4 text-xs animate-[fadeIn_0.3s_ease-out]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {/* Search Customer */}
+            <div className="flex flex-col gap-1">
+              <label className="font-bold text-secondary uppercase tracking-wider text-[10px]">Search Customer</label>
+              <div className="flex items-center bg-surface-container rounded-xl px-3 py-1.5 border border-outline-variant/15 focus-within:border-primary-orange">
+                <span className="material-symbols-outlined text-secondary text-sm mr-1">search</span>
+                <input
+                  type="text"
+                  placeholder="Name/Email..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-transparent border-none p-0 outline-none text-on-surface w-full"
+                />
+              </div>
+            </div>
+
+            {/* Status Filter */}
+            <div className="flex flex-col gap-1">
+              <label className="font-bold text-secondary uppercase tracking-wider text-[10px]">Filter Status</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="bg-surface-container rounded-xl border border-outline-variant/15 px-3 py-2 outline-none text-on-surface font-semibold cursor-pointer w-full"
+              >
+                <option value="All">All Statuses</option>
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="preparing">Preparing</option>
+                <option value="ready">Ready</option>
+                <option value="assigned">Assigned</option>
+                <option value="out_for_delivery">Out for Delivery</option>
+                <option value="delivered">Delivered</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+
+            {/* Rider Accepted */}
+            <div className="flex flex-col gap-1">
+              <label className="font-bold text-secondary uppercase tracking-wider text-[10px]">Rider Accepted</label>
+              <select
+                value={riderAcceptedFilter}
+                onChange={(e) => setRiderAcceptedFilter(e.target.value)}
+                className="bg-surface-container rounded-xl border border-outline-variant/15 px-3 py-2 outline-none text-on-surface font-semibold cursor-pointer w-full"
+              >
+                <option value="All">All</option>
+                <option value="Accepted">Yes</option>
+                <option value="Pending">No</option>
+              </select>
+            </div>
+
+            {/* Sorting */}
+            <div className="flex flex-col gap-1">
+              <label className="font-bold text-secondary uppercase tracking-wider text-[10px]">Sort By</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="bg-surface-container rounded-xl border border-outline-variant/15 px-3 py-2 outline-none text-on-surface font-semibold cursor-pointer w-full"
+              >
+                <option value="-created_at">Date: Newest First</option>
+                <option value="created_at">Date: Oldest First</option>
+                <option value="-total_amount">Total: High to Low</option>
+                <option value="total_amount">Total: Low to High</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Date Range Filters */}
+          <div className="flex flex-col sm:flex-row items-center gap-3 pt-3 border-t border-outline-variant/10">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <label className="font-bold text-secondary uppercase tracking-wider text-[10px] whitespace-nowrap">From:</label>
+              <input
+                type="date"
+                value={createdAfter}
+                onChange={(e) => setCreatedAfter(e.target.value)}
+                className="bg-surface-container rounded-xl border border-outline-variant/15 px-3 py-1 outline-none text-on-surface text-xs cursor-pointer w-full"
+              />
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <label className="font-bold text-secondary uppercase tracking-wider text-[10px] whitespace-nowrap">To:</label>
+              <input
+                type="date"
+                value={createdBefore}
+                onChange={(e) => setCreatedBefore(e.target.value)}
+                className="bg-surface-container rounded-xl border border-outline-variant/15 px-3 py-1 outline-none text-on-surface text-xs cursor-pointer w-full"
+              />
+            </div>
+
+            {/* Reset Button */}
+            {(statusFilter !== "All" || riderAcceptedFilter !== "All" || searchQuery || createdAfter || createdBefore || sortBy !== "-created_at") && (
+              <button
+                onClick={() => {
+                  setStatusFilter("All");
+                  setRiderAcceptedFilter("All");
+                  setSearchQuery("");
+                  setCreatedAfter("");
+                  setCreatedBefore("");
+                  setSortBy("-created_at");
+                }}
+                className="sm:ml-auto text-error hover:underline font-bold text-[10px] uppercase tracking-wider cursor-pointer"
+              >
+                Reset Filters
+              </button>
+            )}
+          </div>
         </div>
 
         {error ? (
@@ -486,6 +649,31 @@ const OrderQueue = () => {
 
               </div>
             ))}
+
+            {/* Pagination Controls */}
+            {Math.ceil(totalCount / pageSize) > 1 && (
+              <div className="flex justify-center items-center gap-4 mt-8 bg-white p-3 rounded-2xl border border-outline-variant/10 shadow-xs max-w-xs mx-auto animate-[fadeIn_0.3s_ease-out]">
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={page === 1}
+                  className="p-1.5 bg-surface hover:bg-surface-container rounded-xl text-secondary hover:text-on-surface disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed transition-all"
+                >
+                  <span className="material-symbols-outlined text-base">chevron_left</span>
+                </button>
+                <span className="text-xs font-bold text-on-surface">
+                  Page {page} of {Math.ceil(totalCount / pageSize)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.min(prev + 1, Math.ceil(totalCount / pageSize)))}
+                  disabled={page === Math.ceil(totalCount / pageSize)}
+                  className="p-1.5 bg-surface hover:bg-surface-container rounded-xl text-secondary hover:text-on-surface disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed transition-all"
+                >
+                  <span className="material-symbols-outlined text-base">chevron_right</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 

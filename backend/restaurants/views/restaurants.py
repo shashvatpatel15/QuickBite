@@ -3,13 +3,29 @@ from restaurants.serializers.restaurant import RestaurantSerializer
 from users.permissions import(IsRestaurantOwner)
 from rest_framework import viewsets
 import rest_framework.permissions
-
+from restaurants.filters import RestaurantFilter
+from common.pagination import CommonPagination
 
 class RestaurantViewSet(viewsets.ModelViewSet):
 
     queryset = Restaurant.objects.all()
     serializer_class = RestaurantSerializer
+    filterset_class = RestaurantFilter
+    pagination_class = CommonPagination
 
+    search_fields = [
+        "name",
+        "description",
+    ]
+
+    ordering_fields = [
+        "name",
+        "created_at",
+        "city",
+    ]
+
+    ordering = ["name"]
+    
     def get_permissions(self):
 
         if self.action in ["list", "retrieve"]:
