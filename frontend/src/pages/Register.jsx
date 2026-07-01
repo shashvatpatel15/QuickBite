@@ -24,38 +24,11 @@ const Register = () => {
     role: "customer",
     password: "",
     confirmPassword: "",
-    latitude: null,
-    longitude: null,
   });
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (formData.role === "delivery_partner" || formData.role === "restaurant_owner") {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            setFormData((prev) => ({
-              ...prev,
-              latitude: position.coords.latitude ? parseFloat(position.coords.latitude.toFixed(6)) : null,
-              longitude: position.coords.longitude ? parseFloat(position.coords.longitude.toFixed(6)) : null,
-            }));
-          },
-          (error) => {
-            console.error("Error getting location: ", error);
-          }
-        );
-      }
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        latitude: null,
-        longitude: null,
-      }));
-    }
-  }, [formData.role]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -70,7 +43,7 @@ const Register = () => {
     setError("");
     setSuccess("");
 
-    const { email, phone_number, role, password, confirmPassword, latitude, longitude } = formData;
+    const { email, phone_number, role, password, confirmPassword } = formData;
 
     if (!email || !phone_number || !password || !confirmPassword) {
       setError("All fields are required.");
@@ -96,7 +69,7 @@ const Register = () => {
 
     setLoading(true);
     try {
-      await register(email, phone_number, role, password, latitude, longitude);
+      await register(email, phone_number, role, password);
       setSuccess("Account created successfully! Verification OTP sent.");
       // Redirect to OTP verification after 2 seconds
       setTimeout(() => {
