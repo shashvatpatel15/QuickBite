@@ -138,13 +138,15 @@ CHANNEL_LAYERS = {
             "hosts": [
                 {
                     "address": config("REDIS_URL"),
-                    "socket_timeout": 5,
-                    "socket_connect_timeout": 5,
+                    "socket_timeout": 30,
+                    "socket_connect_timeout": 10,
                     "retry_on_timeout": True,
-                    "health_check_interval": 20,
+                    "health_check_interval": 10,
                     "socket_keepalive": True,
                 }
             ],
+            "capacity": 1500,
+            "expiry": 10,
         },
     },
 }

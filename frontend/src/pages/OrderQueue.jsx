@@ -105,13 +105,24 @@ const OrderQueue = () => {
 
     let socket = null;
     let reconnectTimeout = null;
+    let heartbeatInterval = null;
 
     const connectWebSocket = () => {
       socket = new WebSocket(wsUrl);
 
+      socket.onopen = () => {
+        // Send heartbeat ping every 25s to keep connection alive
+        heartbeatInterval = setInterval(() => {
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 25000);
+      };
+
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (data.type === "pong") return; // Heartbeat response, ignore
           if (data.type === "new_order") {
             setMessageType("success");
             setMessage(`New order #${data.order_id} received for ₹${parseFloat(data.total).toFixed(2)}!`);
@@ -146,6 +157,8 @@ const OrderQueue = () => {
       };
 
       socket.onclose = (event) => {
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
         if (event.code === 4001) {
           console.error("WebSocket connection unauthorized (4001). Reconnect disabled.");
         } else {
@@ -160,16 +173,17 @@ const OrderQueue = () => {
 
     connectWebSocket();
 
-    // Fallback polling every 30 seconds
+    // Fallback polling every 10 seconds
     const interval = setInterval(() => {
       if (fetchOrdersRef.current) fetchOrdersRef.current(false);
-    }, 30000);
+    }, 10000);
 
     return () => {
       if (socket) {
         socket.onclose = null;
         socket.close();
       }
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       clearInterval(interval);
     };

@@ -208,6 +208,7 @@ const RiderDashboard = () => {
     let reconnectTimeout = null;
     let ws = null;
     let watchId = null;
+    let heartbeatInterval = null;
 
     if (!profile || !profile.is_online) {
       // Cleanup if rider goes offline
@@ -239,6 +240,13 @@ const RiderDashboard = () => {
       locationWsRef.current = ws;
 
       ws.onopen = () => {
+        // Send heartbeat ping every 25s to keep connection alive
+        heartbeatInterval = setInterval(() => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 25000);
+
         // Start continuous GPS tracking
         if (navigator.geolocation && watchId === null) {
           watchId = navigator.geolocation.watchPosition(
@@ -259,12 +267,22 @@ const RiderDashboard = () => {
         }
       };
 
+      ws.onmessage = (event) => {
+        // Ignore pong heartbeat responses
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "pong") return;
+        } catch (e) {}
+      };
+
       ws.onerror = (err) => {
         console.error("Location tracking WebSocket error:", err);
       };
 
       ws.onclose = () => {
         locationWsRef.current = null;
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
         if (profile?.is_online) {
           reconnectTimeout = setTimeout(connectWS, 5000);
         }
@@ -278,6 +296,7 @@ const RiderDashboard = () => {
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
       }
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
       if (ws) {
         ws.close();
       }

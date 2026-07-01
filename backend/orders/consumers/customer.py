@@ -1,7 +1,6 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from orders.models.order import Order
-from delivery.models.delivery_partner import DeliveryPartner
 from channels.db import database_sync_to_async
 
 class CustomerOrderConsumer(AsyncWebsocketConsumer):
@@ -46,6 +45,19 @@ class CustomerOrderConsumer(AsyncWebsocketConsumer):
             await self.channel_layer.group_discard(
                 self.group_name,
                 self.channel_name
+            )
+
+    async def receive(self,text_data):
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            return
+
+        if data.get("type") == "ping":
+            await self.send(
+                text_data=json.dumps(
+                    {"type": "pong"}
+                )
             )
 
     async def order_status_changed(self,event):

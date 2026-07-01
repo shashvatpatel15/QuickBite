@@ -51,6 +51,19 @@ class RestaurantOrderConsumer(AsyncWebsocketConsumer):
             )
 
 
+    async def receive(self,text_data):
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            return
+
+        if data.get("type") == "ping":
+            await self.send(
+                text_data=json.dumps(
+                    {"type": "pong"}
+                )
+            )
+
     async def new_order(self,event):
         await self.send(
             text_data=json.dumps(

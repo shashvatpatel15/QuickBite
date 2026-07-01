@@ -65,6 +65,14 @@ class DeliveryTrackingConsumer(AsyncWebsocketConsumer):
         except (json.JSONDecodeError, TypeError):
             return
 
+        if data.get("type") == "ping":
+            await self.send(
+                text_data=json.dumps(
+                    {"type": "pong"}
+                )
+            )
+            return
+
         latitude = data.get("latitude")
         longitude = data.get("longitude")
 

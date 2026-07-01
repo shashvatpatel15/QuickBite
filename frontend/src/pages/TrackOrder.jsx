@@ -61,13 +61,24 @@ const TrackOrder = () => {
 
     let socket = null;
     let reconnectTimeout = null;
+    let heartbeatInterval = null;
 
     const connectWebSocket = () => {
       socket = new WebSocket(wsUrl);
 
+      socket.onopen = () => {
+        // Send heartbeat ping every 25s to keep connection alive
+        heartbeatInterval = setInterval(() => {
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 25000);
+      };
+
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (data.type === "pong") return; // Heartbeat response, ignore
           
           if (data.event === "LOCATION_UPDATE") {
             // Live Rider Coordinate Update
@@ -86,6 +97,8 @@ const TrackOrder = () => {
       };
 
       socket.onclose = (event) => {
+        if (heartbeatInterval) clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
         if (event.code === 4001) {
           console.error("WebSocket connection unauthorized (4001). Reconnect disabled.");
         } else {
@@ -110,6 +123,7 @@ const TrackOrder = () => {
         socket.onclose = null;
         socket.close();
       }
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       clearInterval(interval);
     };
