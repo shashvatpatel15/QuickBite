@@ -21,28 +21,55 @@ class DeliveryTrackingConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        pass
+        # Properly clean up when WebSocket closes to avoid Daphne forced kill
+        # Only set offline if rider doesn't have an active delivery
+        # (assignment lifecycle manages is_online during deliveries)
+        if hasattr(self, "delivery_partner") and self.delivery_partner:
+            try:
+                await self.set_offline_if_no_active_delivery()
+            except Exception:
+                pass
+
+    @database_sync_to_async
+    def set_offline_if_no_active_delivery(self):
+        """Only mark rider offline if they have no active delivery.
+        If they're on a delivery, the assignment/completion lifecycle manages is_online."""
+        try:
+            partner = DeliveryPartner.objects.get(id=self.delivery_partner.id)
+            has_active = Order.objects.filter(
+                delivery_partner=partner,
+                status__in=[
+                    Order.Status.ASSIGNED,
+                    Order.Status.OUT_FOR_DELIVERY,
+                ]
+            ).exists()
+            if not has_active:
+                partner.is_online = False
+                partner.save(update_fields=["is_online"])
+        except DeliveryPartner.DoesNotExist:
+            pass
 
     @database_sync_to_async
     def set_online_status(self, is_online):
-        self.delivery_partner.is_online = is_online
-        self.delivery_partner.save(
-            update_fields=["is_online"]
-        )
+        # Re-fetch from DB to avoid stale state
+        try:
+            partner = DeliveryPartner.objects.get(id=self.delivery_partner.id)
+            partner.is_online = is_online
+            partner.save(update_fields=["is_online"])
+        except DeliveryPartner.DoesNotExist:
+            pass
 
     async def receive(self,text_data):
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            return
 
-        data = json.loads(
-            text_data
-        )
+        latitude = data.get("latitude")
+        longitude = data.get("longitude")
 
-        latitude = data.get(
-            "latitude"
-        )
-
-        longitude = data.get(
-            "longitude"
-        )
+        if latitude is None or longitude is None:
+            return
 
         await self.update_location(
             latitude,
@@ -129,4 +156,4 @@ class DeliveryTrackingConsumer(AsyncWebsocketConsumer):
             )
             .first()
         )
-    
+

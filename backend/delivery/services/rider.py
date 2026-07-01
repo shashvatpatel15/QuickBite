@@ -33,19 +33,24 @@ def find_nearest_rider(restaurant):
 
     for rider in riders:
 
-        if (
-            rider.current_latitude is None
-            or
-            rider.current_longitude is None
-        ):
-            continue
+        rider_lat = rider.current_latitude
+        rider_lng = rider.current_longitude
+
+        # If rider has no GPS coordinates, assign fallback near the restaurant
+        # so they can still be discovered (critical for development/testing)
+        if rider_lat is None or rider_lng is None:
+            rider_lat = float(restaurant.latitude) + 0.005
+            rider_lng = float(restaurant.longitude) + 0.005
+            rider.current_latitude = rider_lat
+            rider.current_longitude = rider_lng
+            rider.save(update_fields=["current_latitude", "current_longitude"])
 
         distance = (
             haversine_distance(
                 restaurant.latitude,
                 restaurant.longitude,
-                rider.current_latitude,
-                rider.current_longitude
+                rider_lat,
+                rider_lng
             )
         )
 
@@ -81,11 +86,15 @@ def assign_rider(order):
         ]
     )
 
+    # Mark rider as unavailable AND offline so they don't appear
+    # for other restaurants while on this delivery
     rider.is_available = False
+    rider.is_online = False
 
     rider.save(
         update_fields=[
-            "is_available"
+            "is_available",
+            "is_online"
         ]
     )
 
@@ -96,10 +105,13 @@ def reject_delivery(order):
 
     rider = (order.delivery_partner)
     if rider:
+        # Restore rider availability and online status
         rider.is_available = True
+        rider.is_online = True
         rider.save(
             update_fields=[
-                "is_available"
+                "is_available",
+                "is_online"
             ]
         )
     order.delivery_partner = None
@@ -119,4 +131,4 @@ def reject_delivery(order):
     
     from orders.services.order_status import handle_order_status_change
     handle_order_status_change(order)
-    return None
+    return None

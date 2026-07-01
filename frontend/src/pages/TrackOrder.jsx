@@ -27,11 +27,13 @@ const TrackOrder = () => {
       const orderData = response.data;
       setOrder(orderData);
       
-      // Seed initial rider coordinates if available
-      if (orderData.delivery_partner?.current_latitude && orderData.delivery_partner?.current_longitude && !riderCoords) {
+      // Update rider coordinates from REST response (supplements WebSocket updates)
+      const partnerLat = orderData.delivery_partner?.current_latitude;
+      const partnerLng = orderData.delivery_partner?.current_longitude;
+      if (partnerLat != null && partnerLng != null && (parseFloat(partnerLat) !== 0 || parseFloat(partnerLng) !== 0)) {
         setRiderCoords({
-          lat: parseFloat(orderData.delivery_partner.current_latitude),
-          lng: parseFloat(orderData.delivery_partner.current_longitude)
+          lat: parseFloat(partnerLat),
+          lng: parseFloat(partnerLng)
         });
       }
       
@@ -133,18 +135,24 @@ const TrackOrder = () => {
 
     // Current rider coordinates
     const hasRider = order.status === "assigned" || order.status === "out_for_delivery";
-    const rLat = hasRider ? (riderCoords?.lat || parseFloat(order.delivery_partner?.current_latitude) || restLat) : restLat;
-    const rLng = hasRider ? (riderCoords?.lng || parseFloat(order.delivery_partner?.current_longitude) || restLng) : restLng;
+    let rLat = hasRider ? (riderCoords?.lat || parseFloat(order.delivery_partner?.current_latitude) || restLat) : restLat;
+    let rLng = hasRider ? (riderCoords?.lng || parseFloat(order.delivery_partner?.current_longitude) || restLng) : restLng;
+    
+    // If rider position is identical to restaurant, offset slightly so the marker isn't hidden behind
+    if (hasRider && Math.abs(rLat - restLat) < 0.0001 && Math.abs(rLng - restLng) < 0.0001) {
+      rLat = restLat + 0.001;
+      rLng = restLng + 0.001;
+    }
 
     setTimeout(() => {
       const container = document.getElementById(mapContainerId);
       if (!container) return;
 
       const riderIcon = L.divIcon({
-        html: '<div style="background-color: #196b00; color: white; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.4);"><span class="material-symbols-outlined" style="font-size: 20px;">motorcycle</span></div>',
+        html: '<div style="background-color: #196b00; color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid #fff; box-shadow: 0 3px 8px rgba(0,0,0,0.5); z-index: 1000; position: relative;"><span class="material-symbols-outlined" style="font-size: 22px;">motorcycle</span></div>',
         className: 'custom-leaflet-icon',
-        iconSize: [36, 36],
-        iconAnchor: [18, 18]
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
       });
 
       if (!mapRef.current) {
@@ -176,7 +184,7 @@ const TrackOrder = () => {
         L.marker([destLat, destLng], { icon: customerIcon }).addTo(map).bindPopup("<b>Delivery Location</b>");
         
         if (hasRider) {
-          const rMarker = L.marker([rLat, rLng], { icon: riderIcon }).addTo(map).bindPopup("<b>Rider Position</b>");
+          const rMarker = L.marker([rLat, rLng], { icon: riderIcon, zIndexOffset: 1000 }).addTo(map).bindPopup("<b>Rider Position</b>");
           riderMarkerRef.current = rMarker;
         }
 
@@ -199,7 +207,7 @@ const TrackOrder = () => {
             mapRef.current.panTo(latLng);
           }
         } else if (hasRider && mapRef.current) {
-          const rMarker = L.marker([rLat, rLng], { icon: riderIcon }).addTo(mapRef.current).bindPopup("<b>Rider Position</b>");
+          const rMarker = L.marker([rLat, rLng], { icon: riderIcon, zIndexOffset: 1000 }).addTo(mapRef.current).bindPopup("<b>Rider Position</b>");
           riderMarkerRef.current = rMarker;
         }
       }

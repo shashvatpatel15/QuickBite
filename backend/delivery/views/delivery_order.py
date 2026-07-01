@@ -75,11 +75,15 @@ class DeliveryOrderViewSet(viewsets.ModelViewSet):
                 order.delivery_partner
             )
 
+            # Restore rider to available AND online so they can
+            # receive new delivery assignments
             rider.is_available = True
+            rider.is_online = True
 
             rider.save(
                 update_fields=[
-                    "is_available"
+                    "is_available",
+                    "is_online"
                 ]
             )
 

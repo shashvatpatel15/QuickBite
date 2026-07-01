@@ -14,9 +14,15 @@ const OrderHistory = () => {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const response = await API.get("/api/orders/");
+      const response = await API.get("/api/orders/", {
+        params: { page_size: 100, ordering: "-created_at" }
+      });
+      // Handle paginated response ({ count, results }) or flat array
+      const rawOrders = Array.isArray(response.data)
+        ? response.data
+        : response.data?.results || [];
       // Sort orders by id desc to show newest first
-      const sorted = response.data.sort((a, b) => b.id - a.id);
+      const sorted = rawOrders.sort((a, b) => b.id - a.id);
       setOrders(sorted);
       setError(null);
     } catch (err) {

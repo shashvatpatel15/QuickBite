@@ -192,9 +192,11 @@ const RiderDashboard = () => {
   useEffect(() => {
     if (!profile || !profile.is_online) return;
 
+    // Aggressive polling since WebSocket handles location; this catches order state changes
+    fetchData(); // Immediate fetch when going online
     const interval = setInterval(() => {
-      fetchData();
-    }, 15000);
+      fetchActiveOrders(); // Only poll active orders for speed
+    }, 5000);
 
     return () => {
       clearInterval(interval);

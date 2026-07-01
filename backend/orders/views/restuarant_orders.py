@@ -206,14 +206,22 @@ class RestaurantOrderViewSet(
 
         nearby_list = []
         for rider in riders:
-            if rider.current_latitude is None or rider.current_longitude is None:
-                continue
+            rider_lat = rider.current_latitude
+            rider_lng = rider.current_longitude
+
+            # Assign fallback coordinates near restaurant for riders without GPS
+            if rider_lat is None or rider_lng is None:
+                rider_lat = float(restaurant.latitude) + 0.005
+                rider_lng = float(restaurant.longitude) + 0.005
+                rider.current_latitude = rider_lat
+                rider.current_longitude = rider_lng
+                rider.save(update_fields=["current_latitude", "current_longitude"])
 
             distance = haversine_distance(
                 restaurant.latitude,
                 restaurant.longitude,
-                rider.current_latitude,
-                rider.current_longitude
+                rider_lat,
+                rider_lng
             )
 
             name = f"{rider.user.first_name} {rider.user.last_name}".strip()
@@ -226,8 +234,8 @@ class RestaurantOrderViewSet(
                 "phone_number": rider.user.phone_number or "No phone number",
                 "distance": round(distance, 2),
                 "vehicle_number": rider.vehicle_number,
-                "latitude": float(rider.current_latitude),
-                "longitude": float(rider.current_longitude)
+                "latitude": float(rider_lat),
+                "longitude": float(rider_lng)
             })
 
         nearby_list.sort(key=lambda x: x["distance"])
@@ -280,7 +288,8 @@ class RestaurantOrderViewSet(
         order.save(update_fields=["delivery_partner", "status"])
 
         rider.is_available = False
-        rider.save(update_fields=["is_available"])
+        rider.is_online = False
+        rider.save(update_fields=["is_available", "is_online"])
 
         handle_order_status_change(order)
 
