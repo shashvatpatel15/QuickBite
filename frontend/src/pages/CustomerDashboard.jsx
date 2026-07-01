@@ -123,7 +123,10 @@ const CustomerDashboard = () => {
           API.get("/api/orders/").catch(() => ({ data: [] }))
         ]);
         setCategories(catResponse.data);
-        const active = (ordersResponse.data || []).filter(
+        const ordersData = Array.isArray(ordersResponse.data)
+          ? ordersResponse.data
+          : ordersResponse.data?.results || [];
+        const active = ordersData.filter(
           (o) => o.status !== "delivered" && o.status !== "cancelled"
         );
         setActiveOrders(active);
