@@ -218,3 +218,5 @@ client_secret*.json
 *.db
 **/*.sqlite3
 **/*.sqlite3-journal
+
+backend/staticfiles/

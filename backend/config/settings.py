@@ -183,10 +183,7 @@ cloudinary.config(
 )
 
 # Database Configuration - Fallback to local SQLite if PG credentials are not configured
-import sys
-IS_TESTING = "test" in sys.argv
-
-if not IS_TESTING and config("DB_NAME", default=None):
+if config("DB_NAME", default=""):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
@@ -195,11 +192,15 @@ if not IS_TESTING and config("DB_NAME", default=None):
             "PASSWORD": config("DB_PASSWORD"),
             "HOST": config("DB_HOST"),
             "PORT": config("DB_PORT", default="5432"),
-            "OPTIONS": {
-                "sslmode": "require",
-            },
         }
     }
+
+    sslmode = config("DB_SSLMODE", default="")
+    if sslmode:
+        DATABASES["default"]["OPTIONS"] = {
+            "sslmode": sslmode
+        }
+
 else:
     DATABASES = {
         "default": {
@@ -207,7 +208,6 @@ else:
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
